@@ -1,10 +1,14 @@
 <script lang="ts">
     import { Server } from "$lib/types";
     import { onMount } from "svelte";
+    import { serverStatus } from "$lib/utils";
 
     var servers: Server[] = [];
 
     function saveServers() {
+        for (var s of servers) {
+            s.status = "connecting";
+        }
         localStorage.setItem("servers", JSON.stringify(servers));
     }
 
@@ -14,7 +18,22 @@
         }
     }
 
-    onMount(loadServers);
+    function serverStatusWorker() {
+        for (var server of servers) {
+            let server_url =
+                server.protocol + "://" + server.url + ":" + server.port;
+            serverStatus(server_url).then((res) => {
+                server.status = <string>res;
+                servers = servers;
+            });
+        }
+    }
+
+    onMount(() => {
+        loadServers();
+        serverStatusWorker();
+        setInterval(serverStatusWorker, 5000);
+    });
 </script>
 
 <div class="flex flex-col gap-3 m-auto max-w-2xl mt-10">
@@ -25,8 +44,15 @@
             action={"/servers/edit/" + (servers.length + 1).toString()}
             on:submit={() => {
                 let s = new Server();
-                s.id = (servers.length + 1).toString();
-                s.name = "My Server";
+                // Set server id to last elements id + 1 or 1 if no servers exist
+                if (servers.length > 0) {
+                    s.id = (
+                        Number(servers[servers.length - 1].id) + 1
+                    ).toString();
+                } else {
+                    s.id = "1";
+                }
+                s.name = "";
                 s.protocol = "http";
                 s.url = "localhost";
                 s.port = "8080";
@@ -76,7 +102,16 @@
                                 {server.protocol}://{server.url}:{server.port}
                             </p>
                         </div>
-                        <div class="ml-auto flex flex-row gap-1">
+                        <div class="ml-auto flex flex-row gap-1 items-center">
+                            <i
+                                class="fa-solid fa-signal mx-4"
+                                class:fa-fade={server.status in
+                                    ["connecting", ""]}
+                                class:text-gray-600={server.status == "offline"}
+                                class:text-error={server.status == "error"}
+                                class:text-warning={server.status == "warn"}
+                                class:text-success={server.status == "online"}
+                            />
                             <a
                                 class="btn btn-circle btn-ghost"
                                 href={"/servers/edit/" + server.id}
